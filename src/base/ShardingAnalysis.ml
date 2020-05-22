@@ -2448,6 +2448,90 @@ struct
             sharding_constraints);
     pure @@ (sharding_constraints, field_pcms)
 
+  module StringSet = Set.Make (String)
+
+  let good_enough sharding_constraints =
+    let k = List.length sharding_constraints in
+    let is_sat ss = not @@ ShardingSummary.mem CUnsat ss in
+    let hogged_fields ss =
+      ShardingSummary.filter
+        (fun sc -> match sc with CAccess (_, None) -> true | _ -> false)
+        ss
+    in
+    if k = 1 then
+      let ss = snd @@ List.hd sharding_constraints in
+      is_sat ss && ShardingSummary.cardinal (hogged_fields ss) = 0
+    else
+      let hfs =
+        List.map (fun (_, ss) -> hogged_fields ss) sharding_constraints
+      in
+      let num_hogged =
+        List.fold_left ( + ) 0 (List.map ShardingSummary.cardinal hfs)
+      in
+      let union_hfs =
+        List.fold_left ShardingSummary.union ShardingSummary.empty hfs
+      in
+      let all_sat =
+        List.for_all (fun (_, ss) -> is_sat ss) sharding_constraints
+      in
+      let have_conflicting_access =
+        ShardingSummary.cardinal union_hfs < num_hogged
+      in
+      all_sat && not have_conflicting_access
+
+  let gen_table ?(accepted_weak_reads = []) cmod summaries =
+    let all_transitions =
+      List.map (fun (comp, _, _) -> get_id comp.comp_name) summaries
+    in
+    let max_k = List.length all_transitions + 1 in
+    let subsets xs =
+      List.filter (fun ys ->
+          List.compare_length_with ys 0 <> 0
+          && List.compare_length_with ys max_k <> 1)
+      @@ List.fold_right
+           (fun x rest -> rest @ List.map (fun ys -> x :: ys) rest)
+           xs [ [] ]
+    in
+    let filter_proper_subsets xs =
+      let xs = List.map StringSet.of_list xs in
+      let is_maximal x =
+        not
+        @@ List.exists (fun y -> compare x y <> 0 && StringSet.subset x y) xs
+      in
+      List.map StringSet.elements @@ List.filter is_maximal xs
+    in
+
+    let possible_selections = subsets all_transitions in
+    let get_sc sel =
+      match
+        get_sharding_info ~selected_transitions:sel ~accepted_weak_reads cmod
+          summaries
+      with
+      | Ok (sc, _) -> sc
+    in
+    let good_enough_selections =
+      List.filter (fun sel -> good_enough @@ get_sc sel) possible_selections
+    in
+    let counts =
+      let c l =
+        List.length
+        @@ List.filter
+             (fun xs -> List.compare_length_with xs l = 0)
+             good_enough_selections
+      in
+      let lengths = int_range 1 max_k in
+      List.map c lengths
+    in
+    let maximal_selections = filter_proper_subsets good_enough_selections in
+    let csv = String.concat ", " (List.map string_of_int counts) in
+    let str =
+      string_of_int max_k ^ ", " ^ "SEP,  " ^ csv ^ ", " ^ "SEP, "
+      ^ String.concat " OR "
+          (List.map (fun xs -> String.concat "; " xs) maximal_selections)
+    in
+    Printf.printf "%s\n" @@ str;
+    ()
+
   let sa_module selected_transitions weak_reads_str (cmod : cmodule)
       (elibs : libtree list) =
     let senv = SAEnv.mk () in
@@ -2529,7 +2613,14 @@ struct
         (fun (t, ss) -> (t, ShardingSummary.elements ss))
         sharding_constraints
     in
+    gen_table ~accepted_weak_reads cmod summaries;
     (* pure summaries *)
     (* pure senv *)
+    (* Printf.eprintf "%s\n" @@ SAEnv.pp senv; *)
+    (* Printf.eprintf "%s\n"
+       @@ String.concat "\n\n"
+            (List.map
+               (fun (c, x, _) -> get_id c.comp_name ^ ": \n" ^ pp_summary x)
+               summaries); *)
     pure (sharding_constraints, field_pcms)
 end
