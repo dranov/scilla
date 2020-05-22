@@ -2523,11 +2523,23 @@ struct
       List.map c lengths
     in
     let maximal_selections = filter_proper_subsets good_enough_selections in
+    let max_ge_size =
+      List.fold_left max 0 (List.map List.length maximal_selections)
+    in
+    let max_ge_num = List.length maximal_selections in
+    let num_transitions = List.length all_transitions in
+    let sharding_ratio =
+      float_of_int max_ge_size /. float_of_int num_transitions
+    in
     let csv = String.concat ", " (List.map string_of_int counts) in
+    let maximal_str =
+      String.concat " OR "
+        (List.map (fun xs -> String.concat "; " xs) maximal_selections)
+    in
+
     let str =
-      string_of_int max_k ^ ", " ^ "SEP,  " ^ csv ^ ", " ^ "SEP, "
-      ^ String.concat " OR "
-          (List.map (fun xs -> String.concat "; " xs) maximal_selections)
+      Printf.sprintf "%d, %d, %.2f, %d, SEP, %s, SEP, %s\n" num_transitions
+        max_ge_size sharding_ratio max_ge_num csv maximal_str
     in
     Printf.printf "%s\n" @@ str;
     ()
