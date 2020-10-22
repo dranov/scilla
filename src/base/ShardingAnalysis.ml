@@ -2545,7 +2545,7 @@ struct
     ()
 
   let sa_module selected_transitions weak_reads_str (cmod : cmodule)
-      (elibs : libtree list) =
+      (elibs : libtree list) (print_bench : bool) =
     let senv = SAEnv.mk () in
 
     let senv = sa_analyze_folds senv in
@@ -2625,7 +2625,7 @@ struct
         (fun (t, ss) -> (t, ShardingSummary.elements ss))
         sharding_constraints
     in
-    gen_table ~accepted_weak_reads cmod summaries;
+    if print_bench then gen_table ~accepted_weak_reads cmod summaries;
     (* pure summaries *)
     (* pure senv *)
     (* Printf.eprintf "%s\n" @@ SAEnv.pp senv; *)
