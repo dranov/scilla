@@ -339,7 +339,8 @@ type runner_cli = {
   sa_flag : bool;
   sa_transitions : string list;
   sa_accepted_weak_reads : string list;
-  sa_bench : bool;
+  sa_ge : bool;
+  sa_timings : bool;
 }
 
 let parse_cli args ~exe_name =
@@ -356,7 +357,8 @@ let parse_cli args ~exe_name =
   let r_sa = ref false in
   let r_sa_transitions = ref [] in
   let r_sa_accepted_weak_reads = ref [] in
-  let r_bench = ref false in
+  let r_sa_ge = ref false in
+  let r_timings = ref false in
   let speclist =
     [
       ( "-version",
@@ -395,9 +397,6 @@ let parse_cli args ~exe_name =
       ( "-sa",
         Arg.Unit (fun () -> r_sa := true),
         "Run sharding analysis and print results" );
-      ( "-sa-bench",
-        Arg.Unit (fun () -> r_bench := true),
-        "Print sharding analysis benchmarks for given contract" );
       ( "-sa-tr",
         Arg.String (fun s -> r_sa_transitions := s :: !r_sa_transitions),
         "Select transition for sharding in the sharding analysis" );
@@ -405,6 +404,12 @@ let parse_cli args ~exe_name =
         Arg.String
           (fun s -> r_sa_accepted_weak_reads := s :: !r_sa_accepted_weak_reads),
         "Accept weak read (transition:pseudofield) in the sharding analysis" );
+      ( "-sa-ge",
+        Arg.Unit (fun () -> r_sa_ge := true),
+        "Print good enough analysis for given contract" );
+      ( "-sa-timings",
+        Arg.Unit (fun () -> r_timings := true),
+        "Print how much time is spent in each phase" );
       ( "-jsonerrors",
         Arg.Unit (fun () -> r_json_errors := true),
         "Print errors in JSON format" );
@@ -458,5 +463,6 @@ let parse_cli args ~exe_name =
     sa_flag = !r_sa;
     sa_transitions = !r_sa_transitions;
     sa_accepted_weak_reads = !r_sa_accepted_weak_reads;
-    sa_bench = !r_bench;
+    sa_ge = !r_sa_ge;
+    sa_timings = !r_timings;
   }

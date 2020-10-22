@@ -2479,7 +2479,7 @@ struct
       in
       all_sat && not have_conflicting_access
 
-  let gen_table ?(accepted_weak_reads = []) cmod summaries =
+  let gen_goodenough_table ?(accepted_weak_reads = []) cmod summaries =
     let all_transitions =
       List.map (fun (comp, _, _) -> get_id comp.comp_name) summaries
     in
@@ -2541,11 +2541,11 @@ struct
       Printf.sprintf "%d, %d, %.2f, %d, SEP, %s, SEP, %s\n" num_transitions
         max_ge_size sharding_ratio max_ge_num csv maximal_str
     in
-    Printf.printf "%s\n" @@ str;
-    ()
+    Printf.printf "[GoodEnough] %s" @@ str;
+    str
 
   let sa_module selected_transitions weak_reads_str (cmod : cmodule)
-      (elibs : libtree list) (print_bench : bool) =
+      (elibs : libtree list) (gen_goodenough : bool) =
     let senv = SAEnv.mk () in
 
     let senv = sa_analyze_folds senv in
@@ -2625,7 +2625,11 @@ struct
         (fun (t, ss) -> (t, ShardingSummary.elements ss))
         sharding_constraints
     in
-    if print_bench then gen_table ~accepted_weak_reads cmod summaries;
+    let benchmark_results =
+      match gen_goodenough with
+      | true -> Some (gen_goodenough_table ~accepted_weak_reads cmod summaries)
+      | false -> None
+    in
     (* pure summaries *)
     (* pure senv *)
     (* Printf.eprintf "%s\n" @@ SAEnv.pp senv; *)
@@ -2634,5 +2638,5 @@ struct
             (List.map
                (fun (c, x, _) -> get_id c.comp_name ^ ": \n" ^ pp_summary x)
                summaries); *)
-    pure (sharding_constraints, field_pcms)
+    pure (sharding_constraints, field_pcms, benchmark_results)
 end

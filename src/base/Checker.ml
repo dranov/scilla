@@ -257,11 +257,15 @@ let check_lmodule cli =
 let check_cmodule cli =
   let r =
     let initial_gas = cli.gas_limit in
+    let ts = Unix.gettimeofday () in
     let%bind (cmod : ParsedSyntax.cmodule) =
       wrap_error_with_gas initial_gas
       @@ check_parsing cli.input_file ScillaParser.Incremental.cmodule
     in
+    if cli.sa_timings then
+      Printf.printf "[Parse] %.1f\n" ((Unix.gettimeofday () -. ts) *. 1000000.0);
     (* Import whatever libs we want. *)
+    let ts = Unix.gettimeofday () in
     let elibs = import_libs cmod.elibs cli.init_file in
     let%bind recursion_cmod, recursion_rec_principles, recursion_elibs =
       wrap_error_with_gas initial_gas @@ check_recursion cmod elibs
@@ -295,16 +299,23 @@ let check_cmodule cli =
       if cli.cf_flag then Some (check_cashflow typed_cmod cli.cf_token_fields)
       else None
     in
+    if cli.sa_timings then
+      Printf.printf "[Typecheck] %.1f\n"
+        ((Unix.gettimeofday () -. ts) *. 1000000.0);
+    let ts = Unix.gettimeofday () in
     let%bind sa_info_opt =
       if cli.sa_flag then
         let%bind r =
           wrap_error_with_gas remaining_gas
             (analyze_sharding typed_cmod typed_elibs cli.sa_transitions
-               cli.sa_accepted_weak_reads cli.sa_bench)
+               cli.sa_accepted_weak_reads cli.sa_ge)
         in
         pure @@ Some r
       else pure @@ None
     in
+    if cli.sa_timings then
+      Printf.printf "[Sharding] %.1f\n"
+        ((Unix.gettimeofday () -. ts) *. 1000000.0);
     pure
     @@ ( cmod,
          tenv,
@@ -340,7 +351,7 @@ let check_cmodule cli =
       let output =
         match sa_info_opt with
         | None -> output
-        | Some (sc, fpcm) ->
+        | Some (sc, fpcm, _) ->
             let sc_json =
               List.map
                 ~f:(fun (t, tsc) ->
@@ -370,6 +381,7 @@ let check_cmodule cli =
         ^ "\ngas_remaining: " ^ Stdint.Uint64.to_string g ^ "\n"
 
 let run args ~exe_name =
+  let ts = Unix.gettimeofday () in
   GlobalConfig.reset ();
   ErrorUtils.reset_warnings ();
   Datatypes.DataTypeDictionary.reinit ();
@@ -390,7 +402,10 @@ let run args ~exe_name =
   if check_extension cli.input_file file_extn_library then
     (* Check library modules. *)
     check_lmodule cli
-  else if check_extension cli.input_file file_extn_contract then
+  else if check_extension cli.input_file file_extn_contract then (
     (* Check contract modules. *)
-    check_cmodule cli
+    let cm = check_cmodule cli in
+    if cli.sa_timings then
+      Printf.printf "[Total] %.1f\n" ((Unix.gettimeofday () -. ts) *. 1000000.0);
+    cm )
   else fatal_error (mk_error0 (sprintf "Unknown file extension\n"))
